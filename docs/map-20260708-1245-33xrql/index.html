@@ -1,0 +1,1453 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Карта рекламной кампании</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link id="leafletCss" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  :root { --bg:#f5f7fb; --card:#ffffff; --text:#101828; --muted:#667085; --line:#e4e7ec; --accent:#2563eb; }
+  * { box-sizing:border-box; }
+  html, body { width:100%; height:100%; min-height:100%; margin:0; overflow:hidden; font-family:Inter, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  .page { width:100%; height:100vh; height:100dvh; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:18px 24px; display:flex; gap:24px; align-items:flex-start; justify-content:space-between; }
+  h1 { margin:0 0 6px; font-size:22px; line-height:1.2; }
+  .subtitle { color:var(--muted); font-size:13px; }
+  .metrics { display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end; }
+  .metric { background:#f9fafb; border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:130px; }
+  .metric span { display:block; color:var(--muted); font-size:12px; }
+  .metric b { display:block; font-size:18px; margin-top:2px; }
+  .layout { flex:1 1 auto; min-height:0; height:calc(100vh - 88px); height:calc(100dvh - 88px); display:grid; grid-template-columns:340px minmax(0,1fr); }
+  aside { background:var(--card); border-right:1px solid var(--line); overflow:auto; padding:14px; min-height:0; }
+  main { position:relative; min-width:0; min-height:0; height:100%; overflow:hidden; }
+  .aside-title { font-weight:700; margin:4px 0 12px; }
+  .cart-box { border:1px solid var(--line); background:#f9fafb; border-radius:14px; padding:12px; margin-bottom:14px; }
+  .cart-title { font-weight:800; margin-bottom:8px; }
+  .cart-empty { color:var(--muted); font-size:12px; margin:6px 0 10px; }
+  .cart-row { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; border-top:1px solid var(--line); padding:7px 0; font-size:12px; }
+  .cart-row b { display:block; }
+  .cart-row span { color:var(--muted); display:block; margin-top:2px; }
+  .cart-remove { border:0; background:transparent; color:#b42318; cursor:pointer; font-weight:700; }
+  .send-cart { width:100%; border:0; border-radius:10px; padding:9px 10px; background:#16a34a; color:white; font-weight:800; cursor:pointer; margin-top:8px; }
+  .send-cart:disabled { background:#cbd5e1; cursor:not-allowed; }
+  .sort-label { display:block; color:var(--muted); font-size:12px; margin:0 0 5px; }
+  .sort-select { width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff; margin:0 0 10px; }
+  .surface-row { position:relative; margin:0 0 8px; }
+  .surface-item { width:100%; text-align:left; display:block; border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px 82px 10px 11px; margin:0; cursor:pointer; color:var(--text); }
+  .surface-item:hover { border-color:var(--accent); box-shadow:0 1px 8px rgba(37,99,235,.12); }
+  .surface-item.in-cart { border-color:#16a34a; background:#f0fdf4; box-shadow:0 1px 8px rgba(22,163,74,.12); }
+  .surface-item.in-cart strong::after { content:' · в корзине'; color:#16a34a; font-weight:800; }
+  .surface-cart-toggle { position:absolute; top:9px; right:9px; border:0; border-radius:8px; background:#2563eb; color:#fff; padding:6px 8px; font-size:11px; font-weight:800; cursor:pointer; }
+  .surface-cart-toggle.in-cart { background:#b42318; }
+  .surface-item b, .surface-item span, .surface-item small, .surface-item strong { display:block; }
+  .surface-item span { color:#344054; font-size:12px; margin-top:3px; }
+  .surface-item small { color:var(--muted); font-size:11px; margin-top:4px; line-height:1.25; }
+  .surface-item strong { margin-top:6px; font-size:12px; }
+  #map { position:absolute; inset:0; width:100%; height:100%; min-height:0; background:#dbe3ea; z-index:1; }
+  .map-loading, .map-error { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; color:#344054; background:#dbe3ea; z-index:2; }
+  .map-error { color:#b42318; background:#fff5f5; font-weight:700; }
+  .popup { width:var(--popup-width, 410px); max-width:calc(100vw - 76px); font-size:var(--popup-font-size, 13px); line-height:1.28; }
+  .combined-popup { max-height:none; overflow:visible; }
+  .side-tabs { display:flex; gap:6px; margin:8px 0 10px; flex-wrap:wrap; }
+  .side-tab { border:1px solid #d0d5dd; background:#fff; border-radius:8px; padding:6px 8px; cursor:pointer; font-size:12px; line-height:1.15; }
+  .side-tab span { color:#667085; font-size:11px; margin-left:-6px; }
+  .side-tab.active { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; font-weight:700; }
+  .side-panel { border-top:1px solid #e4e7ec; padding-top:8px; }
+  .photo-frame { position:relative; width:100%; height:var(--photo-height, 190px); min-height:var(--photo-height, 190px); background:#f8fafc; margin:7px 0 0; border-radius:8px; border:1px solid #ddd; overflow:hidden; display:flex; align-items:center; justify-content:center; transition:height .16s ease, min-height .16s ease; }
+  .photo { width:100%; height:100%; object-fit:contain; opacity:1; transition:opacity .18s ease; display:block; position:relative; z-index:1; transform-origin:center center; }
+  .photo-frame.loaded .photo { opacity:1; }
+  .photo-frame.zoomable { touch-action:none; }
+  .photo-frame.zooming { overflow:visible; z-index:9999; background:#111; }
+  .photo-frame.zooming .photo { transition:none; z-index:3; }
+  .photo-frame.zooming::after { content:'двойной тап — сброс'; position:absolute; right:8px; bottom:7px; z-index:4; color:#fff; background:rgba(0,0,0,.48); border-radius:999px; padding:3px 7px; font-size:11px; margin-left:-6px; }
+  .photo-loader { display:none !important; }
+  .photo-frame.loaded .photo-loader, .photo-frame.failed .photo-loader { display:none !important; }
+  .photo-loader span { display:none !important; }
+  .photo-frame.loaded .photo-loader, .photo-frame.failed .photo-loader { display:none !important; opacity:0; pointer-events:none; visibility:hidden; transition:opacity .18s ease, visibility .18s ease; }
+  .photo-failed { display:none; color:#667085; font-size:12px; padding:10px; text-align:center; }
+  .photo-frame.failed .photo-failed { display:block; }
+  .photo-frame.failed .photo { display:none; }
+  .photo-frame.failed { height:auto; min-height:42px; }
+  @keyframes oohSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+  .no-photo { margin:8px 0; padding:8px; background:#f6f6f6; color:#666; border-radius:6px; }
+  .links { margin-top:6px; }
+  .status { margin-top:6px; padding:6px; background:#fafafa; border-radius:6px; color:#333; }
+  .cart-add { margin-top:6px; width:100%; border:0; border-radius:8px; background:#2563eb; color:white; padding:7px 9px; cursor:pointer; font-weight:700; }
+  .cart-add:hover { background:#1d4ed8; }
+  .cart-add.in-cart { background:#b42318; }
+  .cart-add.in-cart:hover { background:#912018; }
+  .compact-card .status { padding:5px; }
+  .muted { color:#777; }
+  .month-list { margin-top:4px; }
+  .month-row { display:grid; grid-template-columns:72px 72px 1fr; gap:5px; align-items:center; white-space:nowrap; margin:2px 0; font-size:12px; }
+  .month-name { font-weight:500; }
+  .month-price { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .free { color:#167a2f; background:#e7f6ea; border-radius:4px; padding:1px 5px; font-weight:600; text-align:center; }
+  .sold { color:#a51616; background:#fde8e8; border-radius:4px; padding:1px 5px; font-weight:600; text-align:center; }
+  .gid-label { background:white; border:1px solid #333; border-radius:3px; padding:1px 4px; font-weight:bold; font-size:11px; }
+  .leaflet-popup-content { width:var(--popup-width, 410px) !important; max-width:calc(100vw - 76px) !important; margin:9px 11px; }
+  .leaflet-popup-content-wrapper { max-height:var(--popup-max-height, min(560px, calc(100vh - 72px))); overflow:auto; border-radius:12px; }
+  .leaflet-popup { max-width:calc(100vw - 48px); }
+  .leaflet-popup-content-wrapper { -webkit-overflow-scrolling: touch; }
+  .popup a, .popup button, .popup input, .popup select, .popup textarea, .side-tab { touch-action: manipulation; }
+  @media (max-width: 700px) {
+    .leaflet-popup { max-width:calc(100vw - 18px); }
+    .leaflet-popup-content { width:min(var(--popup-width, 360px), calc(100vw - 34px)) !important; max-width:calc(100vw - 34px) !important; margin:7px 8px; }
+    .leaflet-popup-content-wrapper { max-height:none !important; overflow:visible !important; overscroll-behavior:none; touch-action:none; }
+    .popup { max-width:calc(100vw - 34px); font-size:var(--popup-font-size, 12px); line-height:1.24; }
+    .side-tabs { gap:6px; margin:8px 0 10px; flex-wrap:wrap; }
+    .side-tab { padding:6px 8px; font-size:12px; border-radius:8px; }
+    .side-tab span { font-size:11px; margin-left:-6px; }
+    .side-panel { padding-top:8px; }
+    .surface-card > br { display:initial; }
+    .surface-card > span { display:initial; }
+    .surface-card > span + span::before { content:none; }
+    .links { display:block; }
+    .cart-add { padding:7px 9px; margin-top:6px; border-radius:8px; font-size:12px; }
+    .status { margin-top:6px; padding:6px; font-size:12px; line-height:1.25; }
+    .status > b { display:inline; }
+    .month-list { display:block; margin-top:4px; }
+    .month-row { display:grid; grid-template-columns:72px 72px 1fr; gap:5px; align-items:center; white-space:nowrap; margin:2px 0; font-size:12px; line-height:1.25; }
+    .month-price { display:block; }
+    .free, .sold { padding:1px 5px; border-radius:4px; overflow:visible; text-overflow:clip; }
+    .photo-frame { height:min(var(--photo-height, 150px), 26vh); min-height:min(var(--photo-height, 150px), 26vh); margin-top:7px; }
+    .leaflet-popup-close-button { width:32px !important; height:32px !important; line-height:30px !important; font-size:22px !important; }
+  }
+
+  @media (max-width: 950px) and (orientation: landscape), (max-height: 520px) and (max-width: 950px) {
+    .leaflet-popup { max-width:min(420px, calc(100vw - 16px)); }
+    .leaflet-popup-content { width:min(var(--popup-width, 360px), calc(100vw - 28px), 380px) !important; max-width:calc(100vw - 28px) !important; margin:6px 8px; }
+    .leaflet-popup-content-wrapper { max-height:none !important; overflow:visible !important; overscroll-behavior:none; touch-action:none !important; }
+    .popup { max-width:calc(100vw - 28px); font-size:var(--popup-font-size, 11px); line-height:1.22; }
+    .side-tabs { position:static; z-index:5; background:#fff; padding:0; margin:4px 0 6px; gap:6px; flex-wrap:wrap; }
+    .side-tab { padding:5px 7px; font-size:11px; }
+    .side-tab span { font-size:10px; margin-left:-4px; }
+    .side-panel { padding-top:8px; }
+    .surface-card > br { display:initial; }
+    .surface-card > span { display:initial; }
+    .surface-card > span + span::before { content:none; }
+    .links { display:block; }
+    .photo-frame { height:min(var(--photo-height, 96px), 23vh); min-height:min(var(--photo-height, 96px), 23vh); margin-top:5px; }
+    .status { margin-top:5px; padding:5px; font-size:11px; line-height:1.22; }
+    .status > b { display:inline; }
+    .month-list { display:block; margin-top:4px; }
+    .month-row { display:grid; grid-template-columns:64px 64px 1fr; gap:4px; font-size:11px; margin:2px 0; line-height:1.2; white-space:nowrap; }
+    .month-price { display:block; }
+    .free, .sold { padding:1px 5px; overflow:visible; text-overflow:clip; }
+    .cart-add { padding:6px 8px; margin-top:5px; font-size:11px; }
+  }
+
+  @media (max-width: 900px) {
+    html, body { overflow:hidden; }
+    header { display:block; padding:10px 12px; }
+    h1 { font-size:17px; margin-bottom:3px; }
+    .subtitle { font-size:11px; margin-left:-6px; }
+    .metrics { justify-content:flex-start; margin-top:8px; gap:7px; }
+    .metric { min-width:96px; padding:7px 9px; border-radius:10px; }
+    .metric b { font-size:15px; }
+    .layout { height:calc(100vh - 86px); height:calc(100dvh - 86px); grid-template-columns:1fr; grid-template-rows:minmax(150px, 28vh) minmax(0, 1fr); }
+    aside { max-height:28vh; border-right:0; border-bottom:1px solid var(--line); padding:9px; }
+    .cart-box { padding:9px; margin-bottom:9px; }
+    .surface-item { padding:8px 76px 8px 9px; }
+    main { height:100%; min-height:0; }
+    #map { min-height:0; }
+  }
+
+
+  /* Телефон в горизонтальном положении: вместо вертикальной раскладки
+     показываем список слева, карту справа, без необходимости прокрутки страницы. */
+  @media (max-width: 950px) and (orientation: landscape), (max-height: 520px) and (max-width: 950px) {
+    html, body { height:100%; height:100dvh; overflow:hidden; }
+    .page { height:100vh; height:100dvh; min-height:100vh; min-height:100dvh; }
+    header { height:44px; min-height:44px; padding:6px 10px; display:flex; align-items:center; gap:10px; overflow:hidden; }
+    h1 { font-size:15px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .subtitle { font-size:10px; margin:1px 0 0; white-space:nowrap; }
+    .metrics { display:none; }
+    .layout { height:calc(100vh - 44px); height:calc(100dvh - 44px); grid-template-columns:minmax(220px, 34vw) minmax(0, 1fr); grid-template-rows:1fr; }
+    aside { height:100%; max-height:none; min-height:0; overflow:auto; border-right:1px solid var(--line); border-bottom:0; padding:7px; -webkit-overflow-scrolling:touch; }
+    main { height:100%; min-height:0; overflow:hidden; }
+    #map { height:100%; min-height:0; }
+    .cart-box { padding:7px; margin-bottom:7px; border-radius:10px; }
+    .cart-title { margin-bottom:5px; font-size:13px; }
+    .cart-row { padding:5px 0; font-size:11px; }
+    .send-cart { padding:7px 8px; margin-top:6px; }
+    .aside-title { margin:2px 0 7px; font-size:13px; }
+    .sort-label { font-size:11px; }
+    .sort-select { padding:6px 8px; margin-bottom:7px; }
+    .surface-row { margin-bottom:6px; }
+    .surface-item { padding:7px 66px 7px 8px; border-radius:10px; }
+    .surface-item span { font-size:11px; }
+    .surface-item small { font-size:10px; }
+    .surface-cart-toggle { top:7px; right:7px; padding:5px 6px; font-size:10px; }
+    .leaflet-popup { max-width:min(420px, calc(100vw - 16px)); }
+    .leaflet-popup-content { width:min(var(--popup-width, 360px), calc(100vw - 28px), 380px) !important; max-width:calc(100vw - 28px) !important; margin:6px 8px; }
+    .leaflet-popup-content-wrapper { max-height:none !important; overflow:visible !important; overscroll-behavior:none; touch-action:none !important; }
+    .popup { max-width:calc(100vw - 28px); font-size:10px; line-height:1.12; }
+    .combined-popup > b { display:none; }
+    .side-tabs { position:static; z-index:5; background:#fff; padding:0; margin:2px 0 4px; gap:4px; flex-wrap:nowrap; }
+    .side-tab { flex:1 1 0; min-width:0; padding:4px 5px; font-size:9.5px; }
+    .side-tab span { font-size:8.5px; margin-left:0; }
+    .side-panel { padding-top:4px; }
+    .surface-card > br { display:none; }
+    .surface-card > span { display:inline; }
+    .surface-card > span + span::before { content:' · '; color:#98a2b3; }
+    .links { display:none; }
+    .photo-frame { height:min(var(--photo-height, 62px), 14vh); min-height:min(var(--photo-height, 62px), 14vh); margin-top:3px; }
+    .status { margin-top:3px; padding:3px; font-size:8.5px; line-height:1.05; }
+    .status > b { display:none; }
+    .month-list { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px; margin-top:0; }
+    .month-row { display:grid; grid-template-columns:28px 1fr; gap:2px; font-size:8.5px; margin:0; line-height:1.05; white-space:nowrap; }
+    .month-price { display:none; }
+    .free, .sold { padding:1px 3px; overflow:hidden; text-overflow:ellipsis; }
+    .cart-add { padding:5px 7px; margin-top:4px; font-size:9.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Карта рекламной кампании</h1>
+      <div class="subtitle">Сформировано: 08.07.2026 12:46 МСК · ID карты: MAP-20260708-1245-QO0R</div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span>Поверхностей</span><b>12</b></div>
+      <div class="metric"><span>На карте</span><b>12</b></div>
+    </div>
+  </header>
+  <div class="layout">
+    <aside>
+      <div class="cart-box">
+        <div class="cart-title">Корзина</div>
+        <div id="cartEmpty" class="cart-empty">Пока ничего не выбрано</div>
+        <div id="cartItems"></div>
+        <label class="sort-label" for="requestMethod">Куда отправить заявку</label>
+        <select id="requestMethod" class="sort-select request-method">
+          <option value="telegram">Telegram</option>
+          <option value="email">Почта</option>
+        </select>
+        <button id="sendCart" class="send-cart" type="button" disabled>Отправить заявку</button>
+      </div>
+      <div class="aside-title">Поверхности</div>
+      <label class="sort-label">Сортировка</label>
+      <select id="surfaceSort" class="sort-select">
+        <option value="default">как в списке</option>
+        <option value="gid">по GID</option>
+        <option value="format">по формату</option>
+        <option value="region">по региону</option>
+        <option value="price_desc">по цене ↓</option>
+        <option value="price_asc">по цене ↑</option>
+        <option value="cart">сначала корзина</option>
+      </select>
+      <div id="surfaceList"><div class="surface-row"><button class="surface-item" data-marker="m1" data-side="0" data-cart-gid="MOBB14046А1" data-price-num="50019.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB14046А1"><b>№ MOBB14046А1</b><span>Щит 3×6 · Московская область</span><small>Подушкинское шоссе,   2,7 км, Одинцовский г.о., д. Подушкино</small><strong>50 020 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB14046А1" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m2" data-side="0" data-cart-gid="MOBB16575А" data-price-num="51239.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB16575А"><b>№ MOBB16575А</b><span>Щит 3×6 · Московская область</span><small>Одинцово, Чистяковой ул.  37</small><strong>51 240 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB16575А" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m3" data-side="0" data-cart-gid="MOBB16574А" data-price-num="51239.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB16574А"><b>№ MOBB16574А</b><span>Щит 3×6 · Московская область</span><small>Одинцово, Чистяковой ул.  58, (светофор)</small><strong>51 240 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB16574А" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m4" data-side="0" data-cart-gid="MOBB13519Б" data-price-num="53679.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB13519Б"><b>№ MOBB13519Б</b><span>Щит 3×6 · Московская область</span><small>Одинцово, Красногорское шоссе, нечетная сторона, после Х с ул. Маршала Жукова, (светофор)</small><strong>53 680 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB13519Б" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m5" data-side="0" data-cart-gid="MOBB14909А" data-price-num="59779.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB14909А"><b>№ MOBB14909А</b><span>Щит 3×6 · Московская область</span><small>Можайское шоссе,   5,15 км от МКАД, Одинцовский г.о., д. Мамоново, Колхозная ул. 37</small><strong>59 780 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB14909А" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m6" data-side="0" data-cart-gid="MOBB13520А" data-price-num="70759.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB13520А"><b>№ MOBB13520А</b><span>Щит 3×6 · Московская область</span><small>Можайское шоссе,  10 км от МКАД, Одинцово</small><strong>70 760 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB13520А" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m6" data-side="1" data-cart-gid="MOBB13520Б" data-price-num="58559.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB13520Б"><b>№ MOBB13520Б</b><span>Щит 3×6 · Московская область</span><small>Можайское шоссе,  10 км от МКАД, Одинцово</small><strong>58 560 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB13520Б" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m7" data-side="0" data-cart-gid="MOBB16641А" data-price-num="87839.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB16641А"><b>№ MOBB16641А</b><span>Щит 3×6 · Московская область</span><small>Минское шоссе,   3,5 км от МКАД, Одинцовский г.о., рп. Новоивановское</small><strong>87 840 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB16641А" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m7" data-side="1" data-cart-gid="MOBB16641Б" data-price-num="73199.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB16641Б"><b>№ MOBB16641Б</b><span>Щит 3×6 · Московская область</span><small>Минское шоссе,   3,5 км от МКАД, Одинцовский г.о., рп. Новоивановское</small><strong>73 200 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB16641Б" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m8" data-side="0" data-cart-gid="MOBB50001Б" data-price-num="73199.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB50001Б"><b>№ MOBB50001Б</b><span>Щит 3×6 · Московская область</span><small>Можайское шоссе,   5,3 км от МКАД, Одинцовский г.о., д. Мамоново, Колхозная ул. 92</small><strong>73 200 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB50001Б" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m9" data-side="0" data-cart-gid="MOBB13496Б1" data-price-num="36599.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB13496Б1"><b>№ MOBB13496Б1</b><span>Щит 3×6 · Московская область</span><small>Одинцово, Красногорское шоссе   10 напротив, 500 м до Х с Можайским шоссе, (светофор)</small><strong>36 600 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB13496Б1" title="Добавить/убрать из корзины">Добавить</button></div><div class="surface-row"><button class="surface-item" data-marker="m9" data-side="1" data-cart-gid="MOBB13496А" data-price-num="70759.99999999999" data-format="Щит 3×6" data-region="Московская область" data-gid="MOBB13496А"><b>№ MOBB13496А</b><span>Щит 3×6 · Московская область</span><small>Одинцово, Красногорское шоссе   10 напротив, 500 м до Х с Можайским шоссе, (светофор)</small><strong>70 760 ₽ / мес.</strong></button><button class="surface-cart-toggle" type="button" data-cart-gid="MOBB13496А" title="Добавить/убрать из корзины">Добавить</button></div></div>
+    </aside>
+    <main><div id="map"><div class="map-loading">Загружаю карту…</div></div></main>
+  </div>
+</div>
+<script>
+function switchPopupSide(btn) {
+  const root = btn && btn.closest ? btn.closest('.combined-popup') : null;
+  if (!root) return false;
+  const idx = String(btn.getAttribute('data-side') || '0');
+  root.querySelectorAll('.side-tab').forEach(b => {
+    const active = String(b.getAttribute('data-side')) === idx;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  root.querySelectorAll('.side-panel').forEach(panel => {
+    const active = String(panel.getAttribute('data-side-panel')) === idx;
+    panel.style.display = active ? 'block' : 'none';
+  });
+  if (typeof enablePhotoPinchZoom === 'function') enablePhotoPinchZoom(root);
+  if (typeof syncCartState === 'function') syncCartState();
+  return false;
+}
+
+function addToCartFromButton(btn) {
+  const gid = btn && btn.getAttribute ? btn.getAttribute('data-cart-gid') : null;
+  if (window.toggleCart) { window.toggleCart(gid); return; }
+  if (window.addToCart) { window.addToCart(gid); }
+}
+
+function isLandscapeCompactViewport() {
+  const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  return (vw <= 950 && vh <= 520 && vw > vh);
+}
+
+function updatePopupResponsiveSize() {
+  const zoom = window.map && window.map.getZoom ? window.map.getZoom() : 14;
+  const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  const landscapeCompact = isLandscapeCompactViewport();
+  const factor = Math.max(0.58, Math.min(1.05, 0.58 + (zoom - 9) * 0.06));
+  const width = Math.round(landscapeCompact ? Math.min(360, Math.max(300, vw - 28)) : Math.min(410 * factor, window.innerWidth - 76));
+  const photoH = Math.round(landscapeCompact ? Math.max(52, Math.min(70, vh * 0.16)) : (vw <= 700 ? Math.max(58, Math.min(82, vh * 0.15)) : Math.max(118, Math.min(210, 170 * factor + 20))));
+  const fontSize = Math.round(landscapeCompact ? 10 : (vw <= 700 ? 10.5 : Math.max(10, Math.min(13, 12.7 * factor))));
+  const popupMaxH = landscapeCompact ? 9999 : (vw <= 700 ? 9999 : Math.max(260, Math.min(560, vh - 72)));
+  document.documentElement.style.setProperty('--popup-width', width + 'px');
+  document.documentElement.style.setProperty('--photo-height', photoH + 'px');
+  document.documentElement.style.setProperty('--popup-font-size', fontSize + 'px');
+  document.documentElement.style.setProperty('--popup-max-height', popupMaxH + 'px');
+  document.querySelectorAll('.leaflet-popup-content').forEach(el => { el.style.width = width + 'px'; el.style.fontSize = fontSize + 'px'; });
+  document.querySelectorAll('.leaflet-popup-content-wrapper').forEach(el => { el.style.maxHeight = popupMaxH + 'px'; });
+  if (window.map && window.map._popup && window.map._popup.update && !window.__oohSuppressPopupAutoPan) {
+    setTimeout(() => {
+      if (!window.__oohSuppressPopupAutoPan) window.map._popup.update();
+    }, 0);
+  }
+}
+function setOpenPopupAutoPan(enabled) {
+  try {
+    const m = window.map;
+    if (!m || !m._popup || !m._popup.options) return;
+    const popup = m._popup;
+    if (popup.__oohOriginalAutoPan === undefined) {
+      popup.__oohOriginalAutoPan = popup.options.autoPan;
+    }
+    popup.options.autoPan = enabled ? popup.__oohOriginalAutoPan : false;
+  } catch(e) {}
+}
+function afterPopupImageLayout() {
+  if (typeof updatePopupResponsiveSize === 'function') updatePopupResponsiveSize();
+  if (typeof keepPopupInView === 'function') {
+    setTimeout(keepPopupInView, 20);
+    setTimeout(keepPopupInView, 220);
+  }
+  if (typeof forceMapResize === 'function') setTimeout(forceMapResize, 20);
+}
+window.oohAfterPopupImage = afterPopupImageLayout;
+
+function finishPopupImage(img, ok) {
+  const frame = img && img.closest ? img.closest('.photo-frame') : null;
+  if (!frame) return;
+
+  if (frame._oohPhotoTimer) { clearTimeout(frame._oohPhotoTimer); frame._oohPhotoTimer = null; }
+  frame.dataset.photoDone = '1';
+  frame.dataset.photoState = ok ? 'loaded' : 'failed';
+  frame.dataset.init = 'done';
+  frame.classList.remove('is-loading');
+  frame.classList.toggle('loaded', !!ok);
+  frame.classList.toggle('failed', !ok);
+
+  const loader = frame.querySelector('.photo-loader');
+  if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+
+  if (ok) {
+    img.style.opacity = '1';
+    img.style.display = 'block';
+    img.style.pointerEvents = 'auto';
+    const failed = frame.querySelector('.photo-failed');
+    if (failed && failed.parentNode) failed.parentNode.removeChild(failed);
+  } else {
+    img.style.display = 'none';
+  }
+
+  try { img.onload = null; img.onerror = null; } catch(e) {}
+  if (typeof afterPopupImageLayout === 'function') afterPopupImageLayout();
+}
+
+function initPopupImages(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.photo-frame').forEach(frame => {
+    const img = frame.querySelector('img.ooh-photo');
+    if (!img) return;
+
+    // ВАЖНО: эта функция больше никогда не переводит фото обратно в loading.
+    // Она только финализирует уже загруженные/битые изображения и убирает спиннер.
+    if (frame.dataset.photoDone === '1' || frame.classList.contains('loaded') || frame.classList.contains('failed')) {
+      const loader = frame.querySelector('.photo-loader');
+      if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+      return;
+    }
+
+    if (img.complete) {
+      finishPopupImage(img, !!(img.naturalWidth && img.naturalWidth > 0));
+      return;
+    }
+
+    // Никаких повторных src, таймеров перезагрузки и повторных попыток.
+    // onload/onerror уже стоят прямо на <img> и сработают сами.
+  });
+}
+
+window.oohPhotoLoaded = function(img) { finishPopupImage(img, true); };
+window.oohPhotoFailed = function(img) { finishPopupImage(img, false); };
+window.oohPopupImageDone = function(img, ok) { finishPopupImage(img, ok); };
+window.oohHandlePopupImage = window.oohPopupImageDone;
+
+function oohTouchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function enablePhotoPinchZoom(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.photo-frame img.ooh-photo').forEach(img => {
+    const frame = img.closest('.photo-frame');
+    if (!frame) return;
+    frame.classList.add('zoomable');
+    frame.style.touchAction = 'none';
+    img.style.touchAction = 'none';
+    if (!frame._oohZoomState) {
+      frame._oohZoomState = { scale: 1, tx: 0, ty: 0 };
+    }
+    if (frame.dataset.dblTapReady !== '1') {
+      frame.dataset.dblTapReady = '1';
+      img.addEventListener('dblclick', function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        resetFrameZoom(frame);
+      });
+    }
+  });
+  installPhotoPinchDelegates();
+}
+
+function getPhotoFrameFromEvent(ev) {
+  const t = ev && ev.target;
+  if (!t || !t.closest) return null;
+  const frame = t.closest('.photo-frame.zoomable, .photo-frame');
+  if (!frame || !frame.querySelector('img.ooh-photo')) return null;
+  return frame;
+}
+function getFrameZoomState(frame) {
+  if (!frame._oohZoomState) frame._oohZoomState = { scale: 1, tx: 0, ty: 0 };
+  return frame._oohZoomState;
+}
+function applyFrameZoom(frame) {
+  const img = frame && frame.querySelector ? frame.querySelector('img.ooh-photo') : null;
+  if (!img) return;
+  const st = getFrameZoomState(frame);
+  if (st.scale <= 1.01) {
+    st.scale = 1; st.tx = 0; st.ty = 0;
+    img.style.transform = '';
+    frame.classList.remove('zooming');
+  } else {
+    img.style.transform = 'translate(' + st.tx + 'px,' + st.ty + 'px) scale(' + st.scale + ')';
+    frame.classList.add('zooming');
+  }
+}
+function resetFrameZoom(frame) {
+  const st = getFrameZoomState(frame);
+  st.scale = 1; st.tx = 0; st.ty = 0;
+  applyFrameZoom(frame);
+}
+function suspendMapGesturesForPhoto() {
+  if (!window.map) return;
+  try { if (map.touchZoom && map.touchZoom.enabled()) { map._oohPhotoTouchZoomWasOn = true; map.touchZoom.disable(); } } catch(e) {}
+  try { if (map.dragging && map.dragging.enabled()) { map._oohPhotoDraggingWasOn = true; map.dragging.disable(); } } catch(e) {}
+}
+function restoreMapGesturesAfterPhoto() {
+  if (!window.map) return;
+  try { if (map._oohPhotoTouchZoomWasOn && map.touchZoom) map.touchZoom.enable(); } catch(e) {}
+  try { if (map._oohPhotoDraggingWasOn && map.dragging) map.dragging.enable(); } catch(e) {}
+  map._oohPhotoTouchZoomWasOn = false;
+  map._oohPhotoDraggingWasOn = false;
+}
+function installPhotoPinchDelegates() {
+  if (window.__oohPhotoPinchDelegatesInstalled) return;
+  window.__oohPhotoPinchDelegatesInstalled = true;
+  let active = null;
+  let lastTapAt = 0;
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function consume(ev) {
+    try { ev.preventDefault(); } catch(e) {}
+    try { ev.stopPropagation(); } catch(e) {}
+    try { ev.stopImmediatePropagation(); } catch(e) {}
+  }
+  document.addEventListener('touchstart', function(ev) {
+    if (!isMobileViewport()) return;
+    const frame = getPhotoFrameFromEvent(ev);
+    if (!frame) return;
+    if (ev.touches && ev.touches.length === 2) {
+      const st = getFrameZoomState(frame);
+      active = { frame: frame, mode: 'pinch', startDistance: oohTouchDistance(ev.touches), startScale: st.scale, lastX: 0, lastY: 0 };
+      suspendMapGesturesForPhoto();
+      consume(ev);
+    } else if (ev.touches && ev.touches.length === 1) {
+      const st = getFrameZoomState(frame);
+      const now = Date.now();
+      if (now - lastTapAt < 280) {
+        resetFrameZoom(frame);
+        lastTapAt = 0;
+        consume(ev);
+        return;
+      }
+      lastTapAt = now;
+      if (st.scale > 1.01) {
+        active = { frame: frame, mode: 'pan', lastX: ev.touches[0].clientX, lastY: ev.touches[0].clientY };
+        suspendMapGesturesForPhoto();
+        consume(ev);
+      }
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchmove', function(ev) {
+    if (!active || !active.frame) return;
+    const frame = active.frame;
+    const st = getFrameZoomState(frame);
+    if (active.mode === 'pinch' && ev.touches && ev.touches.length >= 2) {
+      const d = oohTouchDistance(ev.touches);
+      if (active.startDistance > 0) st.scale = clamp(active.startScale * (d / active.startDistance), 1, 4);
+      applyFrameZoom(frame);
+      consume(ev);
+    } else if (active.mode === 'pan' && ev.touches && ev.touches.length === 1 && st.scale > 1.01) {
+      const x = ev.touches[0].clientX;
+      const y = ev.touches[0].clientY;
+      st.tx += (x - active.lastX);
+      st.ty += (y - active.lastY);
+      active.lastX = x;
+      active.lastY = y;
+      applyFrameZoom(frame);
+      consume(ev);
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchend', function(ev) {
+    if (!active || !active.frame) return;
+    const frame = active.frame;
+    const st = getFrameZoomState(frame);
+    if (!ev.touches || ev.touches.length === 0) {
+      if (st.scale < 1.04) resetFrameZoom(frame);
+      active = null;
+      restoreMapGesturesAfterPhoto();
+    } else if (ev.touches.length === 1 && active.mode === 'pinch') {
+      active = { frame: frame, mode: 'pan', lastX: ev.touches[0].clientX, lastY: ev.touches[0].clientY };
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchcancel', function() {
+    if (active && active.frame) resetFrameZoom(active.frame);
+    active = null;
+    restoreMapGesturesAfterPhoto();
+  }, { passive:false, capture:true });
+}
+
+function isMobileViewport() {
+  return (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) || ('ontouchstart' in window);
+}
+function isPopupInteractiveTarget(el) {
+  return !!(el && el.closest && el.closest('button, a, input, textarea, select, label, .side-tab, .cart-add, .leaflet-popup-close-button'));
+}
+function enablePopupMapDrag(popupEl) {
+  if (!popupEl || popupEl.dataset.mobilePanReady === '1') return;
+  popupEl.dataset.mobilePanReady = '1';
+  let active = false;
+  let lastX = 0;
+  let lastY = 0;
+  popupEl.addEventListener('touchstart', function(ev) {
+    if (!isMobileViewport() || !map || isPopupInteractiveTarget(ev.target)) { active = false; return; }
+    const scrollBox = ev.target && ev.target.closest ? ev.target.closest('.leaflet-popup-content-wrapper') : null;
+    // v59: popup без внутренней прокрутки; свайп по свободной области двигает карту.
+    // Если пользователь тянет свободную область карточки, двигаем карту даже при большом содержимом popup.
+    if (ev.touches && ev.touches.length >= 2) {
+      active = false;
+      try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch(e) {}
+      return;
+    }
+    if (!ev.touches || ev.touches.length !== 1) { active = false; return; }
+    active = true;
+    lastX = ev.touches[0].clientX;
+    lastY = ev.touches[0].clientY;
+  }, {passive:false});
+  popupEl.addEventListener('touchmove', function(ev) {
+    if (!active || !map || !ev.touches || ev.touches.length !== 1) return;
+    const x = ev.touches[0].clientX;
+    const y = ev.touches[0].clientY;
+    const dx = x - lastX;
+    const dy = y - lastY;
+    lastX = x;
+    lastY = y;
+    if (Math.abs(dx) + Math.abs(dy) > 1) {
+      ev.preventDefault();
+      map.panBy([-dx, -dy], {animate:false});
+    }
+  }, {passive:false});
+  popupEl.addEventListener('touchend', function() { active = false; }, {passive:true});
+  popupEl.addEventListener('touchcancel', function() { active = false; }, {passive:true});
+}
+function enhancePopupForMobile(root) {
+  const popupEl = root && root.closest ? (root.closest('.leaflet-popup') || root) : root;
+  if (popupEl) enablePopupMapDrag(popupEl);
+  if (typeof enablePhotoPinchZoom === 'function') enablePhotoPinchZoom(root || popupEl || document);
+}
+
+
+function handleCombinedSideTabClick(ev) {
+  const tab = ev && ev.target && ev.target.closest ? ev.target.closest('.side-tab') : null;
+  if (!tab) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+  switchPopupSide(tab);
+}
+document.addEventListener('click', handleCombinedSideTabClick, true);
+document.addEventListener('touchend', handleCombinedSideTabClick, true);
+
+const points = [{"id": "m1", "lat": 55.709715, "lon": 37.271029, "gid": "MOBB14046А1", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB14046А1</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 15.30</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 50 020 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103136\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB14046А1\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"free\">свободен</span><span class=\"month-price\">50 020 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"sold\">продан</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3103136.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m2", "lat": 55.698401, "lon": 37.322007, "gid": "MOBB16575А", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB16575А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 15.48</span><br>\n        <span>Свет: нет</span><br>\n        <b>Стоимость в месяц: 51 240 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103194\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB16575А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3103194.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m3", "lat": 55.704454, "lon": 37.318022, "gid": "MOBB16574А", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB16574А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 14.25</span><br>\n        <span>Свет: нет</span><br>\n        <b>Стоимость в месяц: 51 240 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103191\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB16574А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">51 240 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3103191.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m4", "lat": 55.681755, "lon": 37.271642, "gid": "MOBB13519Б", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB13519Б</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: Б</span><br>\n        <span>OTS: 42.08</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 53 680 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552171\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB13519Б\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">53 680 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">53 680 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">53 680 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">53 680 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">53 680 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/256/2552171.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m5", "lat": 55.688282, "lon": 37.319648, "gid": "MOBB14909А", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB14909А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 54.09</span><br>\n        <span>Свет: нет</span><br>\n        <b>Стоимость в месяц: 59 780 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103245\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB14909А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">59 780 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">59 780 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">59 780 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">59 780 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">59 780 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3103245.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m6", "lat": 55.666795, "lon": 37.253334, "gid": "MOBB13520А / MOBB13520Б", "count": 2, "popup": "<div class=\"popup combined-popup\"><b>В этой точке несколько сторон</b><div class=\"side-tabs\"><button type=\"button\" class=\"side-tab active\" data-side=\"0\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB13520А<br><span>сторона А</span></button><button type=\"button\" class=\"side-tab\" data-side=\"1\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB13520Б<br><span>сторона Б</span></button></div><div class=\"side-panels\"><div class=\"side-panel\" data-side-panel=\"0\" style=\"display:block\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB13520А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 34.71</span><br>\n        <span>Свет: нет</span><br>\n        <b>Стоимость в месяц: 70 760 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552172\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB13520А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">70 760 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">70 760 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">70 760 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/256/2552172.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div><div class=\"side-panel\" data-side-panel=\"1\" style=\"display:none\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB13520Б</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: Б</span><br>\n        <span>OTS: 28.28</span><br>\n        <span>Свет: нет</span><br>\n        <b>Стоимость в месяц: 58 560 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552173\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB13520Б\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">58 560 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">58 560 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">58 560 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">58 560 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/256/2552173.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div></div></div>"}, {"id": "m7", "lat": 55.696118, "lon": 37.340665, "gid": "MOBB16641А / MOBB16641Б", "count": 2, "popup": "<div class=\"popup combined-popup\"><b>В этой точке несколько сторон</b><div class=\"side-tabs\"><button type=\"button\" class=\"side-tab active\" data-side=\"0\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB16641А<br><span>сторона А</span></button><button type=\"button\" class=\"side-tab\" data-side=\"1\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB16641Б<br><span>сторона Б</span></button></div><div class=\"side-panels\"><div class=\"side-panel\" data-side-panel=\"0\" style=\"display:block\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB16641А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 84.44</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 87 840 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103206\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB16641А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">87 840 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">87 840 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">87 840 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">87 840 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">87 840 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3103206.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div><div class=\"side-panel\" data-side-panel=\"1\" style=\"display:none\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB16641Б</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: Б</span><br>\n        <span>OTS: 66.41</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 73 200 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3109687\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB16641Б\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3109687.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div></div></div>"}, {"id": "m8", "lat": 55.687932, "lon": 37.317077, "gid": "MOBB50001Б", "count": 1, "popup": "\n    <div class=\"popup\">\n      <div class=\"surface-card\">\n        <b>№ MOBB50001Б</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: Б</span><br>\n        <span>OTS: 61.88</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 73 200 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=3109689\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB50001Б\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"free\">свободен</span><span class=\"month-price\">73 200 ₽</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/311/3109689.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    "}, {"id": "m9", "lat": 55.678933, "lon": 37.274023, "gid": "MOBB13496Б1 / MOBB13496А", "count": 2, "popup": "<div class=\"popup combined-popup\"><b>В этой точке несколько сторон</b><div class=\"side-tabs\"><button type=\"button\" class=\"side-tab active\" data-side=\"0\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB13496Б1<br><span>сторона Б</span></button><button type=\"button\" class=\"side-tab\" data-side=\"1\" onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" ontouchstart=\"event.stopPropagation()\" onclick=\"event.preventDefault(); event.stopPropagation(); switchPopupSide(this); return false;\">№ MOBB13496А<br><span>сторона А</span></button></div><div class=\"side-panels\"><div class=\"side-panel\" data-side-panel=\"0\" style=\"display:block\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB13496Б1</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: Б</span><br>\n        <span>OTS: 39.56</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 36 600 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=2570356\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB13496Б1\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"free\">свободен</span><span class=\"month-price\">36 600 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"sold\">продан</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/258/2570356.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div><div class=\"side-panel\" data-side-panel=\"1\" style=\"display:none\">\n    <div>\n      <div class=\"surface-card compact-card\">\n        <b>№ MOBB13496А</b><br>\n        <span>Щит 3×6 · Московская область</span><br>\n        <span>Сторона: А</span><br>\n        <span>OTS: 51.90</span><br>\n        <span>Свет: да</span><br>\n        <b>Стоимость в месяц: 70 760 ₽</b>\n        <div class=\"links\"><a href=\"https://online.russoutdoor.ru/public/panel-info/apr?panelId=2570355\" target=\"_blank\" rel=\"noopener noreferrer\">Открыть презентацию</a></div>\n        <button type=\"button\" class=\"cart-add\" data-cart-gid=\"MOBB13496А\" onclick=\"addToCartFromButton(this)\">Добавить в корзину</button>\n        <div class=\"status\"><b>Статус по месяцам:</b><div class=\"month-list\"><div class=\"month-row\"><span class=\"month-name\">Июнь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Июль</span><span class=\"free\">свободен</span><span class=\"month-price\">70 760 ₽</span></div><div class=\"month-row\"><span class=\"month-name\">Август</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Сентябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Октябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Ноябрь</span><span class=\"sold\">продан</span></div><div class=\"month-row\"><span class=\"month-name\">Декабрь</span><span class=\"sold\">продан</span></div></div></div>\n        <div class='photo-frame loaded'><img class='photo ooh-photo' src='https://images.russoutdoor.ru/panelFotos/258/2570355.jpg' alt='фото поверхности' decoding='async' loading='eager' onerror=\"this.closest('.photo-frame').classList.add('failed');this.style.display='none';\"><div class='photo-failed'>Фото не удалось загрузить</div></div>\n      </div>\n    </div>\n    </div></div></div>"}];
+const cartCatalog = [{"marker_id": "m1", "side_idx": 0, "gid": "MOBB14046А1", "format": "Щит 3×6", "region": "Московская область", "address": "Подушкинское шоссе,   2,7 км, Одинцовский г.о., д. Подушкино", "price": "50 020 ₽", "price_num": 50019.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103136", "side": "А", "ots": 15.3, "light": "Да"}, {"marker_id": "m2", "side_idx": 0, "gid": "MOBB16575А", "format": "Щит 3×6", "region": "Московская область", "address": "Одинцово, Чистяковой ул.  37", "price": "51 240 ₽", "price_num": 51239.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103194", "side": "А", "ots": 15.48, "light": "Нeт"}, {"marker_id": "m3", "side_idx": 0, "gid": "MOBB16574А", "format": "Щит 3×6", "region": "Московская область", "address": "Одинцово, Чистяковой ул.  58, (светофор)", "price": "51 240 ₽", "price_num": 51239.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103191", "side": "А", "ots": 14.25, "light": "Нeт"}, {"marker_id": "m4", "side_idx": 0, "gid": "MOBB13519Б", "format": "Щит 3×6", "region": "Московская область", "address": "Одинцово, Красногорское шоссе, нечетная сторона, после Х с ул. Маршала Жукова, (светофор)", "price": "53 680 ₽", "price_num": 53679.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552171", "side": "Б", "ots": 42.08, "light": "Да"}, {"marker_id": "m5", "side_idx": 0, "gid": "MOBB14909А", "format": "Щит 3×6", "region": "Московская область", "address": "Можайское шоссе,   5,15 км от МКАД, Одинцовский г.о., д. Мамоново, Колхозная ул. 37", "price": "59 780 ₽", "price_num": 59779.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103245", "side": "А", "ots": 54.09, "light": "Нeт"}, {"marker_id": "m6", "side_idx": 0, "gid": "MOBB13520А", "format": "Щит 3×6", "region": "Московская область", "address": "Можайское шоссе,  10 км от МКАД, Одинцово", "price": "70 760 ₽", "price_num": 70759.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552172", "side": "А", "ots": 34.71, "light": "Нeт"}, {"marker_id": "m6", "side_idx": 1, "gid": "MOBB13520Б", "format": "Щит 3×6", "region": "Московская область", "address": "Можайское шоссе,  10 км от МКАД, Одинцово", "price": "58 560 ₽", "price_num": 58559.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=2552173", "side": "Б", "ots": 28.28, "light": "Нeт"}, {"marker_id": "m7", "side_idx": 0, "gid": "MOBB16641А", "format": "Щит 3×6", "region": "Московская область", "address": "Минское шоссе,   3,5 км от МКАД, Одинцовский г.о., рп. Новоивановское", "price": "87 840 ₽", "price_num": 87839.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3103206", "side": "А", "ots": 84.44, "light": "Да"}, {"marker_id": "m7", "side_idx": 1, "gid": "MOBB16641Б", "format": "Щит 3×6", "region": "Московская область", "address": "Минское шоссе,   3,5 км от МКАД, Одинцовский г.о., рп. Новоивановское", "price": "73 200 ₽", "price_num": 73199.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3109687", "side": "Б", "ots": 66.41, "light": "Да"}, {"marker_id": "m8", "side_idx": 0, "gid": "MOBB50001Б", "format": "Щит 3×6", "region": "Московская область", "address": "Можайское шоссе,   5,3 км от МКАД, Одинцовский г.о., д. Мамоново, Колхозная ул. 92", "price": "73 200 ₽", "price_num": 73199.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=3109689", "side": "Б", "ots": 61.88, "light": "Да"}, {"marker_id": "m9", "side_idx": 0, "gid": "MOBB13496Б1", "format": "Щит 3×6", "region": "Московская область", "address": "Одинцово, Красногорское шоссе   10 напротив, 500 м до Х с Можайским шоссе, (светофор)", "price": "36 600 ₽", "price_num": 36599.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=2570356", "side": "Б", "ots": 39.56, "light": "Да"}, {"marker_id": "m9", "side_idx": 1, "gid": "MOBB13496А", "format": "Щит 3×6", "region": "Московская область", "address": "Одинцово, Красногорское шоссе   10 напротив, 500 м до Х с Можайским шоссе, (светофор)", "price": "70 760 ₽", "price_num": 70759.99999999999, "presentation": "https://online.russoutdoor.ru/public/panel-info/apr?panelId=2570355", "side": "А", "ots": 51.9, "light": "Да"}];
+const cartEmail = "gomozov.roman@rwb.ru";
+const telegramBotToken = "";
+const telegramChatId = "";
+const telegramProxyUrl = "https://ooh-map.onrender.com/send-telegram-request";
+const clientName = "";
+const clientContact = "";
+const clientMapId = "MAP-20260708-1245-QO0R";
+const mapGeneratedAt = "08.07.2026 12:46 МСК";
+let cart = [];
+
+function cartItemLabel(item) {
+  return '№ ' + item.gid + (item.side ? ' / сторона ' + item.side : '');
+}
+
+function isInCart(gid) {
+  return cart.some(x => String(x.gid) === String(gid));
+}
+
+function syncCartState() {
+  document.querySelectorAll('[data-cart-gid]').forEach(el => {
+    const gid = el.getAttribute('data-cart-gid');
+    const active = isInCart(gid);
+    el.classList.toggle('in-cart', active);
+    if (el.classList.contains('cart-add')) {
+      el.textContent = active ? 'Убрать из корзины' : 'Добавить в корзину';
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    if (el.classList.contains('surface-cart-toggle')) {
+      el.textContent = active ? 'Убрать' : 'Добавить';
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  });
+}
+
+function renderCart() {
+  const box = document.getElementById('cartItems');
+  const empty = document.getElementById('cartEmpty');
+  const send = document.getElementById('sendCart');
+  if (!box || !empty || !send) return;
+  empty.style.display = cart.length ? 'none' : 'block';
+  send.disabled = !cart.length;
+  box.innerHTML = cart.map(item => `
+    <div class="cart-row">
+      <div><b>${cartItemLabel(item)}</b><span>${item.price} / мес.</span></div>
+      <button class="cart-remove" type="button" data-cart-gid="${item.gid}">×</button>
+    </div>`).join('');
+  syncCartState();
+  sortSurfaceList();
+}
+
+
+function sortSurfaceList() {
+  const list = document.getElementById('surfaceList');
+  const select = document.getElementById('surfaceSort');
+  if (!list || !select) return;
+  const mode = select.value || 'default';
+  const rows = Array.from(list.querySelectorAll('.surface-row'));
+  rows.sort((ra, rb) => {
+    const a = ra.querySelector('.surface-item');
+    const b = rb.querySelector('.surface-item');
+    if (!a || !b) return 0;
+    if (mode === 'default') return 0;
+    if (mode === 'cart') return (isInCart(b.dataset.cartGid) ? 1 : 0) - (isInCart(a.dataset.cartGid) ? 1 : 0);
+    if (mode === 'price_desc') return (parseFloat(b.dataset.priceNum || '0') || 0) - (parseFloat(a.dataset.priceNum || '0') || 0);
+    if (mode === 'price_asc') return (parseFloat(a.dataset.priceNum || '0') || 0) - (parseFloat(b.dataset.priceNum || '0') || 0);
+    return String(a.dataset[mode] || '').localeCompare(String(b.dataset[mode] || ''), 'ru');
+  });
+  rows.forEach(row => list.appendChild(row));
+}
+
+function addToCart(gid) {
+  const item = cartCatalog.find(x => String(x.gid) === String(gid));
+  if (!item) return;
+  if (!isInCart(gid)) {
+    cart.push(item);
+    renderCart();
+  }
+}
+
+function removeFromCart(gid) {
+  cart = cart.filter(x => String(x.gid) !== String(gid));
+  renderCart();
+}
+
+function toggleCart(gid) {
+  if (isInCart(gid)) {
+    removeFromCart(gid);
+  } else {
+    addToCart(gid);
+  }
+}
+
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.toggleCart = toggleCart;
+
+let map = null;
+const markerById = {};
+let mapReady = false;
+
+function showMapError(message) {
+  const el = document.getElementById('map');
+  if (!el) return;
+  el.innerHTML = '<div class="map-error">Не удалось загрузить карту. Обновите страницу или проверьте доступ к CDN Leaflet.<br><small>' + String(message || '') + '</small></div>';
+}
+
+function removeMapLoading() {
+  const loading = document.querySelector('#map .map-loading');
+  if (loading) loading.remove();
+}
+
+function loadCssOnce(href) {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  document.head.appendChild(link);
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-ooh-leaflet="' + src + '"]');
+    if (existing) {
+      existing.addEventListener('load', resolve, {once:true});
+      existing.addEventListener('error', reject, {once:true});
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.defer = false;
+    script.setAttribute('data-ooh-leaflet', src);
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('script load failed: ' + src));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureLeaflet() {
+  if (window.L && window.L.map) return;
+  [
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css'
+  ].forEach(loadCssOnce);
+  const jsUrls = [
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js'
+  ];
+  let lastErr = null;
+  for (const url of jsUrls) {
+    try {
+      await loadScriptOnce(url);
+      if (window.L && window.L.map) return;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('Leaflet не загрузился');
+}
+
+function forceMapResize() {
+  if (!map) return;
+  try { map.invalidateSize(false); } catch(e) {}
+}
+
+function clampValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function isLandscapeCompactViewport() {
+  const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  return (vw <= 950 && vh <= 520 && vw > vh);
+}
+
+function updatePopupResponsiveSize() {
+  const zoom = map && map.getZoom ? map.getZoom() : 14;
+  const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  const landscapeCompact = isLandscapeCompactViewport();
+  // Чем дальше карта, тем компактнее popup. Диапазон намеренно шире, чтобы размер реально менялся.
+  const factor = clampValue(0.58 + (zoom - 9) * 0.06, 0.58, 1.05);
+  const maxWidth = landscapeCompact
+    ? Math.max(300, Math.min(380, vw - 28))
+    : Math.max(280, Math.min(440, vw - 76));
+  const width = Math.round(Math.min(maxWidth, landscapeCompact ? 360 : 410 * factor));
+  const photoH = landscapeCompact
+    ? Math.round(clampValue(vh * 0.22, 72, 110))
+    : Math.round(clampValue(165 * factor + 18, 115, Math.min(210, vh * 0.28)));
+  const fontSize = Math.round(landscapeCompact ? clampValue(11.5 * factor, 10, 12) : clampValue(12.8 * factor, 10, 13));
+  const popupMaxH = landscapeCompact
+    ? Math.max(180, vh - 22)
+    : Math.max(260, Math.min(560, vh - 72));
+  document.documentElement.style.setProperty('--popup-width', width + 'px');
+  document.documentElement.style.setProperty('--photo-height', photoH + 'px');
+  document.documentElement.style.setProperty('--popup-font-size', fontSize + 'px');
+  document.documentElement.style.setProperty('--popup-max-height', popupMaxH + 'px');
+  document.querySelectorAll('.leaflet-popup-content').forEach(el => {
+    el.style.width = width + 'px';
+    el.style.maxWidth = (landscapeCompact ? Math.max(260, vw - 28) : Math.max(260, vw - 76)) + 'px';
+    el.style.fontSize = fontSize + 'px';
+  });
+  document.querySelectorAll('.leaflet-popup-content-wrapper').forEach(el => {
+    el.style.maxHeight = popupMaxH + 'px';
+  });
+  if (map && !window.__oohSuppressPopupAutoPan) {
+    const popup = map._popup;
+    if (popup && popup.update) { setTimeout(() => {
+      if (!window.__oohSuppressPopupAutoPan) popup.update();
+    }, 0); }
+  }
+}
+
+function setOpenPopupAutoPan(enabled) {
+  try {
+    if (!map || !map._popup || !map._popup.options) return;
+    const popup = map._popup;
+    if (popup.__oohOriginalAutoPan === undefined) {
+      popup.__oohOriginalAutoPan = popup.options.autoPan;
+    }
+    popup.options.autoPan = enabled ? popup.__oohOriginalAutoPan : false;
+  } catch(e) {}
+}
+
+function keepPopupInView() {
+  // Не подталкиваем карту обратно к popup: пользователь должен свободно двигать карту.
+  if (!map) return;
+  try {
+    const popup = map._popup;
+    if (popup && popup.update) popup.update();
+  } catch(e) {}
+}
+
+function afterPopupImageLayout() {
+  if (typeof updatePopupResponsiveSize === 'function') updatePopupResponsiveSize();
+  if (typeof keepPopupInView === 'function') {
+    setTimeout(keepPopupInView, 20);
+    setTimeout(keepPopupInView, 220);
+  }
+  if (typeof forceMapResize === 'function') setTimeout(forceMapResize, 20);
+}
+window.oohAfterPopupImage = afterPopupImageLayout;
+
+function finishPopupImage(img, ok) {
+  const frame = img && img.closest ? img.closest('.photo-frame') : null;
+  if (!frame) return;
+
+  if (frame._oohPhotoTimer) { clearTimeout(frame._oohPhotoTimer); frame._oohPhotoTimer = null; }
+  frame.dataset.photoDone = '1';
+  frame.dataset.photoState = ok ? 'loaded' : 'failed';
+  frame.dataset.init = 'done';
+  frame.classList.remove('is-loading');
+  frame.classList.toggle('loaded', !!ok);
+  frame.classList.toggle('failed', !ok);
+
+  const loader = frame.querySelector('.photo-loader');
+  if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+
+  if (ok) {
+    img.style.opacity = '1';
+    img.style.display = 'block';
+    img.style.pointerEvents = 'auto';
+    const failed = frame.querySelector('.photo-failed');
+    if (failed && failed.parentNode) failed.parentNode.removeChild(failed);
+  } else {
+    img.style.display = 'none';
+  }
+
+  try { img.onload = null; img.onerror = null; } catch(e) {}
+  if (typeof afterPopupImageLayout === 'function') afterPopupImageLayout();
+}
+
+function initPopupImages(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.photo-frame').forEach(frame => {
+    const img = frame.querySelector('img.ooh-photo');
+    if (!img) return;
+
+    // ВАЖНО: эта функция больше никогда не переводит фото обратно в loading.
+    // Она только финализирует уже загруженные/битые изображения и убирает спиннер.
+    if (frame.dataset.photoDone === '1' || frame.classList.contains('loaded') || frame.classList.contains('failed')) {
+      const loader = frame.querySelector('.photo-loader');
+      if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+      return;
+    }
+
+    if (img.complete) {
+      finishPopupImage(img, !!(img.naturalWidth && img.naturalWidth > 0));
+      return;
+    }
+
+    // Никаких повторных src, таймеров перезагрузки и повторных попыток.
+    // onload/onerror уже стоят прямо на <img> и сработают сами.
+  });
+}
+
+window.oohPhotoLoaded = function(img) { finishPopupImage(img, true); };
+window.oohPhotoFailed = function(img) { finishPopupImage(img, false); };
+window.oohPopupImageDone = function(img, ok) { finishPopupImage(img, ok); };
+window.oohHandlePopupImage = window.oohPopupImageDone;
+
+function oohTouchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function enablePhotoPinchZoom(root) {
+  const scope = root || document;
+  scope.querySelectorAll('.photo-frame img.ooh-photo').forEach(img => {
+    const frame = img.closest('.photo-frame');
+    if (!frame) return;
+    frame.classList.add('zoomable');
+    frame.style.touchAction = 'none';
+    img.style.touchAction = 'none';
+    if (!frame._oohZoomState) {
+      frame._oohZoomState = { scale: 1, tx: 0, ty: 0 };
+    }
+    if (frame.dataset.dblTapReady !== '1') {
+      frame.dataset.dblTapReady = '1';
+      img.addEventListener('dblclick', function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        resetFrameZoom(frame);
+      });
+    }
+  });
+  installPhotoPinchDelegates();
+}
+
+function getPhotoFrameFromEvent(ev) {
+  const t = ev && ev.target;
+  if (!t || !t.closest) return null;
+  const frame = t.closest('.photo-frame.zoomable, .photo-frame');
+  if (!frame || !frame.querySelector('img.ooh-photo')) return null;
+  return frame;
+}
+function getFrameZoomState(frame) {
+  if (!frame._oohZoomState) frame._oohZoomState = { scale: 1, tx: 0, ty: 0 };
+  return frame._oohZoomState;
+}
+function applyFrameZoom(frame) {
+  const img = frame && frame.querySelector ? frame.querySelector('img.ooh-photo') : null;
+  if (!img) return;
+  const st = getFrameZoomState(frame);
+  if (st.scale <= 1.01) {
+    st.scale = 1; st.tx = 0; st.ty = 0;
+    img.style.transform = '';
+    frame.classList.remove('zooming');
+  } else {
+    img.style.transform = 'translate(' + st.tx + 'px,' + st.ty + 'px) scale(' + st.scale + ')';
+    frame.classList.add('zooming');
+  }
+}
+function resetFrameZoom(frame) {
+  const st = getFrameZoomState(frame);
+  st.scale = 1; st.tx = 0; st.ty = 0;
+  applyFrameZoom(frame);
+}
+function suspendMapGesturesForPhoto() {
+  if (!window.map) return;
+  try { if (map.touchZoom && map.touchZoom.enabled()) { map._oohPhotoTouchZoomWasOn = true; map.touchZoom.disable(); } } catch(e) {}
+  try { if (map.dragging && map.dragging.enabled()) { map._oohPhotoDraggingWasOn = true; map.dragging.disable(); } } catch(e) {}
+}
+function restoreMapGesturesAfterPhoto() {
+  if (!window.map) return;
+  try { if (map._oohPhotoTouchZoomWasOn && map.touchZoom) map.touchZoom.enable(); } catch(e) {}
+  try { if (map._oohPhotoDraggingWasOn && map.dragging) map.dragging.enable(); } catch(e) {}
+  map._oohPhotoTouchZoomWasOn = false;
+  map._oohPhotoDraggingWasOn = false;
+}
+function installPhotoPinchDelegates() {
+  if (window.__oohPhotoPinchDelegatesInstalled) return;
+  window.__oohPhotoPinchDelegatesInstalled = true;
+  let active = null;
+  let lastTapAt = 0;
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function consume(ev) {
+    try { ev.preventDefault(); } catch(e) {}
+    try { ev.stopPropagation(); } catch(e) {}
+    try { ev.stopImmediatePropagation(); } catch(e) {}
+  }
+  document.addEventListener('touchstart', function(ev) {
+    if (!isMobileViewport()) return;
+    const frame = getPhotoFrameFromEvent(ev);
+    if (!frame) return;
+    if (ev.touches && ev.touches.length === 2) {
+      const st = getFrameZoomState(frame);
+      active = { frame: frame, mode: 'pinch', startDistance: oohTouchDistance(ev.touches), startScale: st.scale, lastX: 0, lastY: 0 };
+      suspendMapGesturesForPhoto();
+      consume(ev);
+    } else if (ev.touches && ev.touches.length === 1) {
+      const st = getFrameZoomState(frame);
+      const now = Date.now();
+      if (now - lastTapAt < 280) {
+        resetFrameZoom(frame);
+        lastTapAt = 0;
+        consume(ev);
+        return;
+      }
+      lastTapAt = now;
+      if (st.scale > 1.01) {
+        active = { frame: frame, mode: 'pan', lastX: ev.touches[0].clientX, lastY: ev.touches[0].clientY };
+        suspendMapGesturesForPhoto();
+        consume(ev);
+      }
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchmove', function(ev) {
+    if (!active || !active.frame) return;
+    const frame = active.frame;
+    const st = getFrameZoomState(frame);
+    if (active.mode === 'pinch' && ev.touches && ev.touches.length >= 2) {
+      const d = oohTouchDistance(ev.touches);
+      if (active.startDistance > 0) st.scale = clamp(active.startScale * (d / active.startDistance), 1, 4);
+      applyFrameZoom(frame);
+      consume(ev);
+    } else if (active.mode === 'pan' && ev.touches && ev.touches.length === 1 && st.scale > 1.01) {
+      const x = ev.touches[0].clientX;
+      const y = ev.touches[0].clientY;
+      st.tx += (x - active.lastX);
+      st.ty += (y - active.lastY);
+      active.lastX = x;
+      active.lastY = y;
+      applyFrameZoom(frame);
+      consume(ev);
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchend', function(ev) {
+    if (!active || !active.frame) return;
+    const frame = active.frame;
+    const st = getFrameZoomState(frame);
+    if (!ev.touches || ev.touches.length === 0) {
+      if (st.scale < 1.04) resetFrameZoom(frame);
+      active = null;
+      restoreMapGesturesAfterPhoto();
+    } else if (ev.touches.length === 1 && active.mode === 'pinch') {
+      active = { frame: frame, mode: 'pan', lastX: ev.touches[0].clientX, lastY: ev.touches[0].clientY };
+    }
+  }, { passive:false, capture:true });
+  document.addEventListener('touchcancel', function() {
+    if (active && active.frame) resetFrameZoom(active.frame);
+    active = null;
+    restoreMapGesturesAfterPhoto();
+  }, { passive:false, capture:true });
+}
+
+function isMobileViewport() {
+  return (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) || ('ontouchstart' in window);
+}
+function isPopupInteractiveTarget(el) {
+  return !!(el && el.closest && el.closest('button, a, input, textarea, select, label, .side-tab, .cart-add, .leaflet-popup-close-button'));
+}
+function enablePopupMapDrag(popupEl) {
+  if (!popupEl || popupEl.dataset.mobilePanReady === '1') return;
+  popupEl.dataset.mobilePanReady = '1';
+  let active = false;
+  let lastX = 0;
+  let lastY = 0;
+  popupEl.addEventListener('touchstart', function(ev) {
+    if (!isMobileViewport() || !map || isPopupInteractiveTarget(ev.target)) { active = false; return; }
+    const scrollBox = ev.target && ev.target.closest ? ev.target.closest('.leaflet-popup-content-wrapper') : null;
+    // v59: popup без внутренней прокрутки; свайп по свободной области двигает карту.
+    // Если пользователь тянет свободную область карточки, двигаем карту даже при большом содержимом popup.
+    if (ev.touches && ev.touches.length >= 2) {
+      active = false;
+      try { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch(e) {}
+      return;
+    }
+    if (!ev.touches || ev.touches.length !== 1) { active = false; return; }
+    active = true;
+    lastX = ev.touches[0].clientX;
+    lastY = ev.touches[0].clientY;
+  }, {passive:false});
+  popupEl.addEventListener('touchmove', function(ev) {
+    if (!active || !map || !ev.touches || ev.touches.length !== 1) return;
+    const x = ev.touches[0].clientX;
+    const y = ev.touches[0].clientY;
+    const dx = x - lastX;
+    const dy = y - lastY;
+    lastX = x;
+    lastY = y;
+    if (Math.abs(dx) + Math.abs(dy) > 1) {
+      ev.preventDefault();
+      map.panBy([-dx, -dy], {animate:false});
+    }
+  }, {passive:false});
+  popupEl.addEventListener('touchend', function() { active = false; }, {passive:true});
+  popupEl.addEventListener('touchcancel', function() { active = false; }, {passive:true});
+}
+function enhancePopupForMobile(root) {
+  const popupEl = root && root.closest ? (root.closest('.leaflet-popup') || root) : root;
+  if (popupEl) enablePopupMapDrag(popupEl);
+  if (typeof enablePhotoPinchZoom === 'function') enablePhotoPinchZoom(root || popupEl || document);
+}
+
+function initClientMap() {
+  if (mapReady) return;
+  if (!window.L || !window.L.map) {
+    showMapError('Leaflet JS не найден');
+    return;
+  }
+  removeMapLoading();
+  mapReady = true;
+  const mapEl = document.getElementById('map');
+  if (mapEl) {
+    mapEl.style.height = '100%';
+    mapEl.style.minHeight = '520px';
+  }
+  updatePopupResponsiveSize();
+  map = window.map = L.map('map', {preferCanvas:true, zoomControl:true}).setView([55.687852545045416, 37.2962891169718], 11);
+  map.on('zoomstart', () => {
+    window.__oohSuppressPopupAutoPan = true;
+    setOpenPopupAutoPan(false);
+    updatePopupResponsiveSize();
+  });
+  map.on('zoom', () => {
+    window.__oohSuppressPopupAutoPan = true;
+    setOpenPopupAutoPan(false);
+    updatePopupResponsiveSize();
+  });
+  map.on('zoomend', () => {
+    updatePopupResponsiveSize();
+    setTimeout(() => {
+      window.__oohSuppressPopupAutoPan = false;
+      setOpenPopupAutoPan(true);
+    }, 120);
+  });
+  map.on('popupopen', (ev) => { const el = ev.popup && ev.popup.getElement ? ev.popup.getElement() : document; window.__oohSuppressPopupAutoPan = false; updatePopupResponsiveSize(); initPopupImages(el); enhancePopupForMobile(el); setTimeout(keepPopupInView, 20); });
+  const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19,
+    attribution:'&copy; OpenStreetMap',
+    crossOrigin:true
+  }).addTo(map);
+  osmLayer.on('tileerror', function() {
+    if (!window.__oohFallbackTiles) {
+      window.__oohFallbackTiles = true;
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        maxZoom:19,
+        attribution:'&copy; OpenStreetMap &copy; CARTO'
+      }).addTo(map);
+    }
+  });
+  const group = L.featureGroup().addTo(map);
+  points.forEach(p => {
+    const marker = L.marker([p.lat, p.lon]).addTo(group).bindPopup(p.popup, {maxWidth:520, minWidth:240, autoPan:true, keepInView:false, autoPanPadding:[18,18]});
+    markerById[p.id] = marker;
+    marker.on('popupopen', syncCartState);
+    const label = p.count > 1 ? ('№ ' + p.gid + ' (' + p.count + ')') : ('№ ' + p.gid);
+    marker.bindTooltip(label, {permanent:true, direction:'top', offset:[-12,-10], className:'gid-label'});
+  });
+  if (points.length) { map.fitBounds(group.getBounds().pad(0.2)); }
+  function scheduleViewportResize() {
+    forceMapResize();
+    setTimeout(forceMapResize, 80);
+    setTimeout(forceMapResize, 260);
+    if (typeof updatePopupResponsiveSize === 'function') {
+      try { updatePopupResponsiveSize(); } catch(e) {}
+    }
+  }
+  window.addEventListener('resize', scheduleViewportResize);
+  window.addEventListener('orientationchange', scheduleViewportResize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleViewportResize);
+  }
+  setTimeout(forceMapResize, 50);
+  setTimeout(forceMapResize, 300);
+  setTimeout(forceMapResize, 1000);
+  setTimeout(forceMapResize, 2000);
+}
+
+function centerOpenedPopup(marker) {
+  updatePopupResponsiveSize();
+  if (!map || !marker) return;
+  const popup = marker.getPopup && marker.getPopup();
+  const popupEl = popup && popup.getElement ? popup.getElement() : null;
+  const mapEl = document.getElementById('map');
+  if (!popupEl || !mapEl) return;
+  const pr = popupEl.getBoundingClientRect();
+  const mr = mapEl.getBoundingClientRect();
+  if (!pr.width || !pr.height || !mr.width || !mr.height) return;
+  const dx = (pr.left + pr.width / 2) - (mr.left + mr.width / 2);
+  const dy = (pr.top + pr.height / 2) - (mr.top + mr.height / 2);
+  if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+    map.panBy([dx, dy], {animate:false});
+  }
+}
+
+function openMarkerFromList(markerId, sideIdx) {
+  if (!map || !mapReady) {
+    setTimeout(() => openMarkerFromList(markerId, sideIdx), 180);
+    return;
+  }
+  const marker = markerById[markerId];
+  if (!marker) return;
+  const targetZoom = Math.max(map.getZoom(), 16);
+  const targetLatLng = marker.getLatLng();
+  map.stop();
+
+  // Открываем popup ровно один раз после плавного перелёта.
+  // Убраны повторные setTimeout-центровки, из-за которых карта сначала
+  // переносилась к точке, а потом через секунду ещё раз "докручивалась".
+  let opened = false;
+  const openOnce = () => {
+    if (opened) return;
+    opened = true;
+    marker.openPopup();
+    syncCartState();
+    const popupEl = marker.getPopup() && marker.getPopup().getElement ? marker.getPopup().getElement() : null;
+    if (popupEl && sideIdx !== null && sideIdx !== undefined) {
+      const applyRequestedSide = () => {
+        const currentPopupEl = marker.getPopup() && marker.getPopup().getElement ? marker.getPopup().getElement() : null;
+        const tab = currentPopupEl && currentPopupEl.querySelector ? currentPopupEl.querySelector('.side-tab[data-side="' + String(sideIdx) + '"]') : null;
+        if (tab) switchPopupSide(tab);
+      };
+      applyRequestedSide();
+      requestAnimationFrame(applyRequestedSide);
+      setTimeout(applyRequestedSide, 80);
+      setTimeout(applyRequestedSide, 240);
+    }
+    // Одна мягкая корректировка сразу после появления popup, без повторов.
+    requestAnimationFrame(() => {
+      updatePopupResponsiveSize();
+      const popup = marker.getPopup && marker.getPopup();
+      const popupEl2 = popup && popup.getElement ? popup.getElement() : null;
+      const mapEl = document.getElementById('map');
+      if (!popupEl2 || !mapEl) return;
+      const pr = popupEl2.getBoundingClientRect();
+      const mr = mapEl.getBoundingClientRect();
+      if (!pr.width || !pr.height || !mr.width || !mr.height) return;
+      const dx = (pr.left + pr.width / 2) - (mr.left + mr.width / 2);
+      const dy = (pr.top + pr.height / 2) - (mr.top + mr.height / 2);
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        map.panBy([dx, dy], {animate:true, duration:0.18, easeLinearity:0.35});
+      }
+    });
+  };
+
+  const currentZoom = map.getZoom();
+  const samePlace = map.getCenter().distanceTo(targetLatLng) < 2 && currentZoom >= targetZoom;
+  if (samePlace) {
+    openOnce();
+    return;
+  }
+  map.once('moveend', openOnce);
+  map.flyTo(targetLatLng, targetZoom, {animate:true, duration:0.35, easeLinearity:0.35, noMoveStart:false});
+  setTimeout(openOnce, 650);
+}
+
+function bootMap() {
+  ensureLeaflet().then(initClientMap).catch(err => showMapError(err && err.message ? err.message : err));
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootMap, {once:true});
+} else {
+  bootMap();
+}
+window.addEventListener('load', forceMapResize);
+document.querySelectorAll('.surface-item').forEach(btn => {
+  btn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    openMarkerFromList(btn.dataset.marker, btn.dataset.side || '0');
+  });
+});
+
+const surfaceSort = document.getElementById('surfaceSort');
+if (surfaceSort) surfaceSort.addEventListener('change', sortSurfaceList);
+
+document.addEventListener('click', (ev) => {
+  const toggleBtn = ev.target.closest && ev.target.closest('.surface-cart-toggle');
+  if (toggleBtn) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    toggleCart(toggleBtn.dataset.cartGid);
+    return;
+  }
+  const removeBtn = ev.target.closest && ev.target.closest('.cart-remove');
+  if (removeBtn) {
+    removeFromCart(removeBtn.dataset.cartGid);
+  }
+});
+
+
+function showTelegramSuccessPopup() {
+  const existing = document.getElementById('telegramSuccessOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'telegramSuccessOverlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.42);backdrop-filter:blur(2px);';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'width:min(420px, calc(100vw - 36px));border-radius:20px;background:#fff;color:#0f172a;box-shadow:0 24px 80px rgba(15,23,42,.28);padding:22px 20px 18px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:left;';
+
+  const title = document.createElement('div');
+  title.textContent = 'Заявка отправлена, спасибо!';
+  title.style.cssText = 'font-size:18px;line-height:1.25;font-weight:800;margin:0 0 8px;';
+
+  const text = document.createElement('div');
+  text.textContent = 'Мы уже получили Ваш запрос и в ближайшее время свяжемся с Вами для уточнения деталей.';
+  text.style.cssText = 'font-size:14px;line-height:1.45;color:#334155;margin:0 0 16px;';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Хорошо';
+  btn.style.cssText = 'width:100%;border:0;border-radius:14px;background:#0f172a;color:#fff;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;';
+
+  const close = () => overlay.remove();
+  btn.addEventListener('click', close);
+  overlay.addEventListener('click', (ev) => {
+    if (ev.target === overlay) close();
+  });
+  document.addEventListener('keydown', function onEsc(ev) {
+    if (ev.key === 'Escape') {
+      document.removeEventListener('keydown', onEsc);
+      close();
+    }
+  });
+
+  card.appendChild(title);
+  card.appendChild(text);
+  card.appendChild(btn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  btn.focus({preventScroll:true});
+}
+
+async function submitTelegramMessage(text) {
+  if (!telegramProxyUrl) {
+    alert('Не задан адрес сервера отправки заявки.');
+    return false;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
+
+  try {
+    const response = await fetch(telegramProxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        map_id: clientMapId || '',
+        client_name: clientName || '',
+        client_contact: clientContact || '',
+        generated_at: mapGeneratedAt || '',
+        page_url: window.location.href
+      }),
+      signal: controller.signal
+    });
+
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (jsonError) {
+      payload = null;
+    }
+
+    if (!response.ok || !payload || payload.ok !== true) {
+      const detail = payload && (payload.description || payload.error) ? (payload.description || payload.error) : ('HTTP ' + response.status);
+      throw new Error(detail);
+    }
+
+    showTelegramSuccessPopup();
+    return true;
+  } catch (error) {
+    const message = error && error.name === 'AbortError'
+      ? 'Превышено время ожидания ответа сервера. Попробуйте ещё раз.'
+      : ('Не удалось отправить заявку в Telegram: ' + (error && error.message ? error.message : error));
+    console.error('Telegram proxy error:', error);
+    alert(message);
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function buildTelegramRequestText() {
+  const lines = ['🟢 Новая заявка с карты поверхностей', ''];
+  lines.push('Клиент: ' + (clientName || 'не указан'));
+  if (clientContact) lines.push('Контакт: ' + clientContact);
+  lines.push('ID карты: ' + (clientMapId || 'не указан'));
+  if (mapGeneratedAt) lines.push('Сформировано: ' + mapGeneratedAt);
+  lines.push('Карта: ' + window.location.href);
+  lines.push('', 'Поверхности:');
+  cart.forEach((item, idx) => {
+    lines.push(`${idx + 1}. № ${item.gid}`);
+    if (item.format || item.region) lines.push(`   ${item.format} · ${item.region}`);
+    if (item.side) lines.push(`   Сторона: ${item.side}`);
+    if (item.price) lines.push(`   Стоимость в месяц: ${item.price}`);
+    if (item.ots !== undefined && item.ots !== null && String(item.ots).trim()) lines.push(`   OTS: ${item.ots}`);
+    if (item.light) lines.push(`   Свет: ${item.light}`);
+    if (item.presentation) lines.push(`   Презентация: ${item.presentation}`);
+    lines.push('');
+  });
+  let text = lines.join('\n');
+  if (text.length > 3900) text = text.slice(0, 3850) + '\n\n…список обрезан, полная подборка доступна по ссылке на карту.';
+  return text;
+}
+
+function buildEmailRequestBody() {
+  const lines = ['Здравствуйте!', '', 'Прошу забронировать следующие рекламные поверхности:', ''];
+  cart.forEach((item, idx) => {
+    lines.push(`${idx + 1}. № ${item.gid}`);
+    if (item.side) lines.push(`Сторона: ${item.side}`);
+    if (item.format || item.region) lines.push(`Формат / регион: ${item.format || ''}${item.format && item.region ? ' · ' : ''}${item.region || ''}`);
+    if (item.price) lines.push(`Стоимость в месяц: ${item.price}`);
+    if (item.ots !== undefined && item.ots !== null && String(item.ots).trim()) lines.push(`OTS: ${item.ots}`);
+    if (item.light) lines.push(`Свет: ${item.light}`);
+    if (item.presentation) lines.push(`Презентация: ${item.presentation}`);
+    lines.push('');
+  });
+  lines.push('Спасибо.');
+  lines.push('', 'Ссылка на карту: ' + window.location.href);
+  return lines.join('\n');
+}
+
+function submitEmailRequest() {
+  if (!cartEmail) {
+    alert('Не задан email для заявки.');
+    return;
+  }
+  const subject = encodeURIComponent('Заявка на бронирование рекламных поверхностей');
+  const body = encodeURIComponent(buildEmailRequestBody());
+  window.location.href = 'mailto:' + encodeURIComponent(cartEmail) + '?subject=' + subject + '&body=' + body;
+}
+
+function currentRequestMethod() {
+  const select = document.getElementById('requestMethod');
+  return select && select.value ? select.value : 'telegram';
+}
+
+function updateSendButtonLabel() {
+  const btn = document.getElementById('sendCart');
+  if (!btn) return;
+  const method = currentRequestMethod();
+  btn.textContent = method === 'email' ? 'Отправить заявку на почту' : 'Отправить заявку в Telegram';
+}
+
+const requestMethodSelect = document.getElementById('requestMethod');
+if (requestMethodSelect) requestMethodSelect.addEventListener('change', updateSendButtonLabel);
+
+const sendCartBtn = document.getElementById('sendCart');
+if (sendCartBtn) {
+  sendCartBtn.addEventListener('click', async () => {
+    if (!cart.length || sendCartBtn.disabled) return;
+    const method = currentRequestMethod();
+    if (method === 'email') {
+      submitEmailRequest();
+      sendCartBtn.textContent = 'Открываю почту…';
+      setTimeout(updateSendButtonLabel, 2200);
+    } else {
+      sendCartBtn.disabled = true;
+      sendCartBtn.textContent = 'Заявка отправляется в Telegram…';
+      await submitTelegramMessage(buildTelegramRequestText());
+      sendCartBtn.disabled = false;
+      updateSendButtonLabel();
+    }
+  });
+}
+updateSendButtonLabel();
+renderCart();
+</script>
+</body>
+</html>
